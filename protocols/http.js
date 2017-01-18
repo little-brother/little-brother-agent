@@ -4,7 +4,6 @@ const http = require('http');
 // opts = {hostname: 127.0.0.1, port: 80}
 // address = {path: /get/user/15}
 exports.getValues = function (opts, address_list, callback) {
-	let time = new Date().getTime();
 	let res = [];
 	let options = {
 		hostname: opts.hostname,
@@ -24,9 +23,7 @@ exports.getValues = function (opts, address_list, callback) {
 			response.on('error', function (err) {
 				res[i] = { 
 					value: err.message, 
-					isError: true, 
-					address, 
-					time
+					isError: true
 				};
 
 				getValue(i + 1);
@@ -35,9 +32,7 @@ exports.getValues = function (opts, address_list, callback) {
 			response.on('end', function() {	
 				res[i] = {
 					value: data, 
-					isError: false, 
-					address, 
-					time 
+					isError: false
 				};
 
 				getValue(i + 1);

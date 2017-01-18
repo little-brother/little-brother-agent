@@ -15,8 +15,6 @@ exports.getValues = function(opts, address_list, callback) {
 	});
 
 	let res = new Array(address_list.length);
-	let time = new Date().getTime();
-
 	if (opts.version == 1) {
 		function getValue(i) {
 			if (i == address_list.length) {
@@ -28,9 +26,7 @@ exports.getValues = function(opts, address_list, callback) {
 			session.get([address], function(err, rows){
 				res[i] = {
 					value: (err) ? err.message : rows[0].value,
-					isError: !!(err),
-					address,
-					time
+					isError: !!(err)
 				};
 	
 				getValue(i + 1);
@@ -45,10 +41,7 @@ exports.getValues = function(opts, address_list, callback) {
 			res = address_list.map(function(address, i) {
 				return {
 					value:  (err) ? err.message : snmp.isVarbindError(rows[i]) ? snmp.varbindError(rows[i]) : rows[i].value,
-					isError: !!(err || snmp.isVarbindError(rows[i])), // snmp.ObjectType[rows[i].type],
-					raw: (rows) ? rows[i] : null,
-					address,
-					time
+					isError: !!(err || snmp.isVarbindError(rows[i]))
 				}
 			});
 			callback(res);

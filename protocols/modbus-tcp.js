@@ -13,7 +13,6 @@ let regCount = {
 // opts = {ip: 168.0.45.12, port: 112, device_id: 165, timeout: 3}
 // address = {func: readCoils, register: 3, type: readUInt16, order: LE}
 exports.getValues = function(opts, address_list, callback) {
-	let time = new Date().getTime();
 	let client = new ModbusRTU();
 	client.connectTCP(opts.ip, {port: opts.port}, function () {
 		client.setID(opts.device_id);
@@ -31,8 +30,7 @@ exports.getValues = function(opts, address_list, callback) {
 			if (!client[address.func] || !!isNaN(address.register) || address.register < 1) {
 				res[i] = {
 					value: 'BAD_PARAMS', 
-					isError: true, 
-					time
+					isError: true
 				};
 
 				getValue(i +1);
@@ -45,9 +43,7 @@ exports.getValues = function(opts, address_list, callback) {
 				res[i] = {
 					value: (err) ? err : data.buffer[address.type + address.order] ? data.buffer[address.type + address.order]() : data.buffer.readInt8(), 
 					isError: !!(err), 
-					raw: (err) ? err : data.buffer,
-					address,
-					time
+					raw: (err) ? err : data.buffer
 				};
 
 				getValue(i + 1);

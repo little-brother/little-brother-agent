@@ -10,12 +10,12 @@ let dir = __dirname + '/protocols/';
 let protocols = fs.readdirSync(dir).reduce((r, f) => {r[path.parse(f).name] = require(dir + f); return r}, {});
 
 let config = Object.assign({},
-	JSON.parse(fs.readFileSync('./config.json')), 
+	JSON.parse(fs.readFileSync(__dirname + '/config.json')), 
 	process.argv.splice(process.execArgv.length + 2)
 		.map((e) => e.split('='))
 		.reduce((res, e) => {res[e[0]] = e[1]; return res;}, {}));
-let devices = fs.existsSync('./cache.json') ? JSON.parse(fs.readFileSync('./cache.json')) : {};
-let cacheDevices = () => fs.writeFile('./cache.json', JSON.stringify(devices, null, '\t'), (err) => console.log(err ? err : `Cache updated: ${Object.keys(devices).length} devices \n`));
+let devices = fs.existsSync(__dirname + '/cache.json') ? JSON.parse(fs.readFileSync(__dirname + '/cache.json')) : {};
+let cacheDevices = () => fs.writeFile(__dirname + '/cache.json', JSON.stringify(devices, null, '\t'), (err) => console.log(err ? err : `Cache updated: ${Object.keys(devices).length} devices \n`));
 
 let agent = new tcpCrypto.Server(config);
 let timers = {};

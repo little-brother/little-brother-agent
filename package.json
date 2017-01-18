@@ -1,17 +1,17 @@
 {
-  "name": "little-brother-agent",
-  "version": "0.9.1",
+  "name": "little-brother-dcim-agent",
+  "version": "0.9.7",
   "keywords": [
     "DCIM"
   ],
   "author": {
     "email": "lb.im@ya.ru"
   },
-  "main": "agent.js",
+  "main": "index.js",
   "dependencies": {
     "modbus-serial": "^4.5.1",
     "net-snmp": "^1.1.18",
-    "tcp-crypto": "^0.9.3"
+    "tcp-crypto": "^0.9.5"
   },
   "repository": {
     "type": "git",

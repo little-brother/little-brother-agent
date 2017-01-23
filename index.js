@@ -1,6 +1,7 @@
 'use strict'
 const fs = require('fs');
 const path = require('path');
+const child_process = require('child_process');
 const tcpCrypto = require('tcp-crypto');
 
 if (require.main !== module)
@@ -13,9 +14,21 @@ let config = Object.assign({},
 	JSON.parse(fs.readFileSync(__dirname + '/config.json')), 
 	process.argv.splice(process.execArgv.length + 2)
 		.map((e) => e.split('='))
-		.reduce((res, e) => {res[e[0]] = e[1]; return res;}, {}));
+		.reduce(function (res, e) {
+			try {
+				res[e[0]] = JSON.parse(e[1]); 
+			} catch (err) {
+				res[e[0]] = e[1]; 
+			}
+			return res;
+		}, {}));
 let devices = fs.existsSync(__dirname + '/cache.json') ? JSON.parse(fs.readFileSync(__dirname + '/cache.json')) : {};
 let cacheDevices = () => fs.writeFile(__dirname + '/cache.json', JSON.stringify(devices, null, '\t'), (err) => console.log(err ? err : `Cache updated: ${Object.keys(devices).length} devices \n`));
+
+function debug() {
+	if (config.debug)	
+		console.log.apply(this, arguments);
+}
 
 let agent = new tcpCrypto.Server(config);
 let timers = {};
@@ -23,6 +36,49 @@ let idleTimer;
 
 if (!config['no-cache'])
 	idleConnection();
+
+if (config.catcher) {
+	let catcher = child_process.spawn(config.catcher.command, config.catcher.args, config.catcher.options);
+	console.log('Catcher running');
+
+	var re = new RegExp(config.catcher.regexp);
+
+	function onData(data) {
+		var res = re.exec(data);
+		if (!res)
+			return;
+		
+		debug('Catch: ', data.toString());
+	
+		for (let device_id in devices) {
+			let device = devices[device_id];
+			if (!device.protocol_params || device.protocol_params.ip != res[1] || !protocols[device.protocol])
+				continue;
+
+			protocols[device.protocol].getValues(
+				device.protocol_params, 
+				device.varbind_list.map((v) => v.address),
+				function (res) {
+					debug('getValues done for device ' + device.id + 'on trap');
+
+					agent.send('VALUES', {
+						device_id: device.id, 
+						time: new Date().getTime(), 
+						values: res.reduce(function (r, e, i) {r[device.varbind_list[i].id] = e; return r;}, {})
+					});
+				}
+			)						
+		}
+	} 
+	
+	catcher.stdout.on('data', onData);
+	catcher.stderr.on('data', onData);
+	catcher.on('close', function(code) {
+		console.error('Catcher crashed with code ' + code);
+		process.exit(1);
+	});	
+
+}
 
 agent.on('UPDATE-LIST', function (device_list) {
 	if (device_list.length == 0)
@@ -80,7 +136,7 @@ agent.on('connection', function() {
 
 agent.on('disconnection', () => console.log('Connection close ' + new Date() + '\n'));
 agent.on('error', (err) => console.log(err));
-agent.on('send', (msg) => console.log('SENDED ' + new Date() + '\n', msg, '\n'));
+agent.on('send', (msg) => debug('SENDED ' + new Date() + '\n', msg, '\n'));
 
 function idleConnection() {
 	idleTimer = setTimeout(function() {
@@ -113,7 +169,8 @@ function polling(device, delay) {
 		device.protocol_params, 
 		device.varbind_list.map((v) => v.address),
 		function (res) {
-			console.log('getValues done for device ' + device.id);
+			debug('getValues done for device ' + device.id);
+
 			agent.send('VALUES', {
 				device_id: device.id, 
 				time: new Date().getTime(), 

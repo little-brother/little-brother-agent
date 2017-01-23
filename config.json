@@ -2,5 +2,6 @@
 	"port": 3000,
 	"cipher": "aes192",
 	"password": "little",
-	"dir": "./outbox"
+	"dir": "./outbox",
+	"debug": false	
 }

@@ -21,6 +21,16 @@ Remote TCP agent for **[Little brother DCIM](https://github.com/little-brother/l
   * **password** - encrypt password. Default `little`.
   * **dir** - message storage while DCIM is not connect. Default `./outbox`. If `dir` is not set then agent don't protect messages by `fs`.
   * **no-cache** - no store local device list in `cache.json` (agent always wait list from server). Default `false`.
+  * **debug** - print sended data to console if it's `true`
+  * **catcher** - define catcher for traps
+    * **command** - running deamon, eg `snmptrapd`
+    * **args** - arguments, eg `["-A", "-n", "-f", "-Lo"]`
+    * **options** - optional [options](https://nodejs.org/api/child_process.html#child_process_child_process_spawn_command_args_options) for command.
+    * **regexp** - regexp pattern to get ip address. You can use `\\[(.*?)\\]` to parse snmp trap like below
+
+      ```
+      2017-01-23 23:35:11 UDP: [127.0.0.1]:56632->[0.0.0.0]:0 [UDP: [127.0.0.1]:56632->[0.0.0.0]:0]:DISMAN-EVENT-MIB::sysUpTimeInstance = Timeticks: (3002705848) 347 days, 12:50:58.48     SNMPv2-MIB::snmpTrapOID.0 = OID: SNMPv2-SMI::org.3.3.3.3.3.3    iso.2.2.2.2.2.2 = STRING: "Aliens opened the door"
+      ```	
 
 4. Run
   ``` bash
@@ -29,7 +39,7 @@ Remote TCP agent for **[Little brother DCIM](https://github.com/little-brother/l
 
   You can override config parameters e.g.  
   ``` bash
-  forever start index.js dir="./some-dir" 
+  forever start index.js dir="./some-dir" catcher="{\"command\":\"snmptrapd\", \"args\":[\"-A\", \"-n\", \"-f\", \"-Lo\", \"-Lf\"], \"regexp\":\"\\[(.*?)\\]\"}"
   ```
 
 ## Messages

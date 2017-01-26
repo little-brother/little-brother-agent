@@ -4,9 +4,6 @@ const path = require('path');
 const child_process = require('child_process');
 const tcpCrypto = require('tcp-crypto');
 
-if (require.main !== module)
-	return module.exports = tcpCrypto.Client;
-
 let dir = __dirname + '/protocols/';
 let protocols = fs.readdirSync(dir).reduce((r, f) => {r[path.parse(f).name] = require(dir + f); return r}, {});
 
@@ -37,46 +34,50 @@ let idleTimer;
 if (!config['no-cache'])
 	idleConnection();
 
-if (config.catcher) {
-	let catcher = child_process.spawn(config.catcher.command, config.catcher.args, config.catcher.options);
-	console.log('Catcher running');
-
-	var re = new RegExp(config.catcher.regexp);
-
-	function onData(data) {
-		var res = re.exec(data);
-		if (!res)
-			return;
+let catcher_list = config['catcher-list'];
+if (catcher_list && catcher_list instanceof Array && catcher_list.length > 0) {
+	catcher_list.forEach(function (opts) {
+		let catcher = child_process.spawn(opts.command, opts.args, opts.options);
+		debug(`Catcher ${opts.name} running`);
+	
+		var re = new RegExp(opts.regexp);
+	
+		function onData(data) {
+			var res = re.exec(data);
+			if (!res)
+				return;
+			
+			debug(`${opts.name} catch: `, data.toString());
 		
-		debug('Catch: ', data.toString());
+			for (let device_id in devices) {
+				let device = devices[device_id];
+				if (device.protocol != opts.protocol || !device.protocol_params || device.protocol_params.ip != res[1] || !protocols[device.protocol])
+					continue;
 	
-		for (let device_id in devices) {
-			let device = devices[device_id];
-			if (!device.protocol_params || device.protocol_params.ip != res[1] || !protocols[device.protocol])
-				continue;
-
-			protocols[device.protocol].getValues(
-				device.protocol_params, 
-				device.varbind_list.map((v) => v.address),
-				function (res) {
-					debug('getValues done for device ' + device.id + 'on trap');
-
-					agent.send('VALUES', {
-						device_id: device.id, 
-						time: new Date().getTime(), 
-						values: res.reduce(function (r, e, i) {r[device.varbind_list[i].id] = e; return r;}, {})
-					});
-				}
-			)						
-		}
-	} 
+				protocols[device.protocol].getValues(
+					device.protocol_params, 
+					device.varbind_list.map((v) => v.address),
+					function (res) {
+						debug('getValues done for device ' + device.id + ` on ${opts.name} trap`);
 	
-	catcher.stdout.on('data', onData);
-	catcher.stderr.on('data', onData);
-	catcher.on('close', function(code) {
-		console.error('Catcher crashed with code ' + code);
-		process.exit(1);
-	});	
+						agent.send('VALUES', {
+							device_id: device.id, 
+							time: new Date().getTime(), 
+							values: res.reduce(function (r, e, i) {r[device.varbind_list[i].id] = e; return r;}, {})
+						});
+					}
+				)						
+			}
+		} 
+		
+		catcher.stdout.on('data', onData);
+		catcher.stderr.on('data', onData);
+		catcher.on('close', function(code) {
+			console.error(`Catcher ${opts.name} crashed with code ${code}`);
+			process.exit(1);
+		});	
+
+	})
 
 }
 

@@ -1,10 +1,10 @@
 # Little brother agent
 
-Remote TCP agent for **[Little brother DCIM](https://github.com/little-brother/little-brother-dcim)**. 
+Remote TCP agent for **[Little brother](https://github.com/little-brother/little-brother)**. 
 
 ## Usage
 
-1. Download [latest version](https://github.com/little-brother/little-brother-dcim-agent/archive/master.zip) and unpack to desired folder.
+1. Download [latest version](https://github.com/little-brother/little-brother-agent/archive/master.zip) and unpack to desired folder.
 
 2. Open console, go to unpacked files and run to install 
   ``` bash

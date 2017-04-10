@@ -1,6 +1,6 @@
 {
-  "name": "little-brother-dcim-agent",
-  "version": "0.9.9",
+  "name": "little-brother-agent",
+  "version": "0.9.10",
   "keywords": [
     "DCIM"
   ],
@@ -9,13 +9,14 @@
   },
   "main": "index.js",
   "dependencies": {
+    "iconv-lite": "^0.4.15",
     "modbus-serial": "^4.5.1",
     "net-snmp": "^1.1.18",
     "tcp-crypto": "^0.9.5"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/little-brother/little-brother-dcim-agent.git"
+    "url": "https://github.com/little-brother/little-brother-agent.git"
   },
   "license": "GPL-2.0",
   "homepage": "http://little-brother.ru"

@@ -1,12 +1,13 @@
 'use strict';
 const snmp = require('net-snmp');
+const iconv = require('iconv-lite');
 const ver = {'1' : snmp.Version1, '2c' : snmp.Version2c};
 
 // opts = {version: 2c, community: public, port: 161, timeout: 3}
 // address = {oid: 1.3.6.1.2.1.1.3.0}
 exports.getValues = function(opts, address_list, callback) {
 	if (ver[opts.version] == undefined)
-		throw new Error('Unsupported version of snmp: ' + opts.version);
+		return callback(new Error('Unsupported version of snmp: ' + opts.version));
 
 	let session = snmp.createSession (opts.ip, opts.community, {
 		port: opts.port, 
@@ -14,18 +15,37 @@ exports.getValues = function(opts, address_list, callback) {
 		timeout: opts.timeout * 1000 || 3000
 	});
 
+	function parseValue(value, hint) {
+		if (!hint)
+			return isNaN(value) ? value.toString() : value;
+
+		if (hint == 'MAC' && value instanceof Buffer && value.length == 6) {
+			let res = [];
+			for (let i = 0; i < 6; i++)
+				res.push(value[i].toString('16').toUpperCase());
+			return res.map((e) => e.length == 1 ? '0' + e : e).join(':');
+		}
+
+		if (value instanceof Buffer && iconv.encodingExists(hint))
+			return iconv.decode(value, hint);
+
+		return value.toString();
+	}
+
 	let res = new Array(address_list.length);
 	if (opts.version == 1) {
 		function getValue(i) {
 			if (i == address_list.length) {
 				closeSession(session);
+				if (res && res.length > 0 && res.every((e) => e.isError && e.value == res[0].value))	
+					res = new Error(res[0].value);
 				return callback(res);
 			}
 
 			let address = address_list[i].oid; 
 			session.get([address], function(err, rows){
 				res[i] = {
-					value: (err) ? err.message : rows[0].value,
+					value: (err) ? err.message : parseValue(rows[0].value, address_list[i].hint),
 					isError: !!(err)
 				};
 	
@@ -38,14 +58,18 @@ exports.getValues = function(opts, address_list, callback) {
 
 	if (opts.version == '2c') {
 		session.get (address_list.map((a) => a.oid), function (err, rows) {
+			closeSession(session);
+
+			if (err)
+				return callback(err);
+
 			res = address_list.map(function(address, i) {
 				return {
-					value:  (err) ? err.message : snmp.isVarbindError(rows[i]) ? snmp.varbindError(rows[i]) : rows[i].value,
-					isError: !!(err || snmp.isVarbindError(rows[i]))
+					value:  snmp.isVarbindError(rows[i]) ? snmp.varbindError(rows[i]) : parseValue(rows[i].value, address.hint),
+					isError: !!snmp.isVarbindError(rows[i])
 				}
 			});
 			callback(res);
-			closeSession(session);
 		});
 	}
 }
@@ -54,12 +78,12 @@ exports.getValues = function(opts, address_list, callback) {
 // action = {oid: '1.2.3', type: 2, value: 10}
 exports.doAction = function(opts, action, callback) {
 	if (ver[opts.version] == undefined)
-		throw new Error('Unsupported version of snmp: ' + opts.version);
+		return callback('Unsupported version of snmp: ' + opts.version);
 
-	let session = snmp.createSession (opts.ip, opts.write_community, {
+	let session = snmp.createSession (opts.ip, opts.community_write, {
 		port: opts.port, 
 		version: ver[opts.version], 
-		timeout: opts.timeout * 1000 || 3000
+		timeout: parseInt(opts.timeout) * 1000 || 3000
 	});
 
 	session.set ([{
@@ -69,7 +93,7 @@ exports.doAction = function(opts, action, callback) {
 		}], 
 		function (err, res) {
 			closeSession(session);
-			callback(err.message);
+			callback(err && err.message || '');
 		}
 	);	
 }

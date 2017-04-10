@@ -27,6 +27,8 @@ function debug() {
 		console.log.apply(this, arguments);
 }
 
+debug(config);
+
 let agent = new tcpCrypto.Server(config);
 let timers = {};
 let idleTimer;
@@ -54,19 +56,7 @@ if (catcher_list && catcher_list instanceof Array && catcher_list.length > 0) {
 				if (device.protocol != opts.protocol || !device.protocol_params || device.protocol_params.ip != res[1] || !protocols[device.protocol])
 					continue;
 	
-				protocols[device.protocol].getValues(
-					device.protocol_params, 
-					device.varbind_list.map((v) => v.address),
-					function (res) {
-						debug('getValues done for device ' + device.id + ` on ${opts.name} trap`);
-	
-						agent.send('VALUES', {
-							device_id: device.id, 
-							time: new Date().getTime(), 
-							values: res.reduce(function (r, e, i) {r[device.varbind_list[i].id] = e; return r;}, {})
-						});
-					}
-				)						
+				queryValues(device);						
 			}
 		} 
 		
@@ -78,7 +68,6 @@ if (catcher_list && catcher_list instanceof Array && catcher_list.length > 0) {
 		});	
 
 	})
-
 }
 
 agent.on('UPDATE-LIST', function (device_list) {
@@ -108,20 +97,30 @@ agent.on('GET-VALUE', function (data, msg_id) {
 
 	protocols[data.protocol].getValues(data.protocol_params, [data.address], function (res) {
 		res.time = new Date().getTime(); 
-		agent.send('GET-VALUE', res[0], msg_id)
+		agent.send('GET-VALUE', res instanceof Error ? {value: res.message, isError: true} : res[0], msg_id)
 	});
 });
 
 agent.on('DO-ACTION', function (data, msg_id) {
 	if (!protocols[data.protocol])	
-		return agent.send('GET-VALUE', 'unsupported protocol: ' + data.protocol, msg_id);
+		return agent.send('DO-ACTION', 'unsupported protocol: ' + data.protocol, msg_id);
 
-	protocols[data.protocol].doAction(data, function (err){
-		if (!err)
-			polling(data.device_id);
+	protocols[data.protocol].doAction(data.protocol_params, data.action, function (err) {
 		agent.send('DO-ACTION', err, msg_id);
+
+		if (!err && devices[data.device_id])
+			polling(devices[data.device_id], 0);
 	});
 });
+
+agent.on('PING', function(ip, msg_id) {
+	if (!config.ping || !config.ping.command)
+		return agent.send('PING', 'Ping command is not setted', msg_id);
+
+	let proc = child_process.exec(eval(`\`${config.ping.command}\``), eval(`\`${config.ping.options}\``));
+	proc.on('error', (err) => agent.send('PING', err, msg_id));
+	proc.on('exit', (code) => agent.send('PING', code, msg_id));
+})
 
 agent.on('connection', function() {
 	console.log('\nConnection open ' + new Date());
@@ -135,7 +134,11 @@ agent.on('connection', function() {
 	devices = {}; // Bag: If server fail after connection then load empty data
 });
 
-agent.on('disconnection', () => console.log('Connection close ' + new Date() + '\n'));
+agent.on('disconnection', function () {
+	console.log('Connection close ' + new Date() + '\n');
+	if (!!config['no-alone'])
+		process.exit(0);
+});
 agent.on('error', (err) => console.log(err));
 agent.on('send', (msg) => debug('SENDED ' + new Date() + '\n', msg, '\n'));
 
@@ -148,24 +151,7 @@ function idleConnection() {
 	}, config.wait_connection || 1000);
 }
 
-function polling(device, delay) {
-	if (!device || !device.id)
-		return console.log('Error: bad device', device);
-
-	if (timers[device.id]) {
-		clearTimeout(timers[device.id]);
-		delete timers[device.id];
-	}
-
-	if (!device.varbind_list || device.varbind_list.length == 0 || device.protocol == 'none' || device.protocol == 'internal')
-		return;
-
-	if (!protocols[device.protocol])
-		return console.log('Unsupported protocol: ' + device.protocol);
-
-	if (delay)
-		return timers[device.id] = setTimeout(() => polling(device), delay);
-
+function queryValues(device, callback) {
 	protocols[device.protocol].getValues(
 		device.protocol_params, 
 		device.varbind_list.map((v) => v.address),
@@ -174,10 +160,40 @@ function polling(device, delay) {
 
 			agent.send('VALUES', {
 				device_id: device.id, 
-				time: new Date().getTime(), 
-				values: res.reduce(function (r, e, i) {r[device.varbind_list[i].id] = e; return r;}, {})
+				time: new Date().getTime(),
+				error: res instanceof Error ? res.message : undefined,
+				values: !(res instanceof Error) ?  res.reduce(function (r, e, i) {r[device.varbind_list[i].id] = e; return r;}, {}) : undefined
 			});
-			timers[device.id] = setTimeout(polling, parseInt(device.protocol_params.period) * 1000 || 10000, device);
+
+			if (callback)
+				callback();
 		}
-	)		
+	)
+}
+
+function polling(device, delay) {
+	if (!device || !device.id)
+		return console.error('Error: bad device', device);
+
+	if (timers[device.id]) {
+		clearTimeout(timers[device.id]);
+		delete timers[device.id];
+	}
+
+	if (!devices[device.id] || !device.varbind_list || device.varbind_list.length == 0 || device.protocol == 'none' || device.protocol == 'internal')
+		return;
+
+	if (!protocols[device.protocol])
+		return console.error('Unsupported protocol: ' + device.protocol);
+
+	if (delay)
+		return timers[device.id] = setTimeout(() => polling(device), delay);
+
+	queryValues(device, function () {
+		timers[device.id] = setTimeout(
+			polling, 
+			parseInt(device.protocol_params.period) * 1000 || 10000, 
+			device
+		);
+	});	
 }

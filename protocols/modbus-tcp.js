@@ -16,15 +16,31 @@ exports.getValues = function(opts, address_list, callback) {
 	let client = new ModbusRTU();
 	client.connectTCP(opts.ip, {port: opts.port}, function () {
 		client.setID(opts.device_id);
-		client.setTimeout(device.protocol_params.timeout * 1000 || 3000);
+
+		let timer = setTimeout(onEnd, opts.timeout * 1000 || 3000);
 
 		let res = new Array(address_list.length);
+
+		function onEnd() {
+			clearTimeout(timer);
+			timer = 0;
+			client.close();
+
+			for (let i = 0; i < address_list.length; i++)
+				res[i] = !!res[i] ? res[i] : {value: 'Timeout', isError: true};
+
+			if (res.every((e) => !!e.isError && e.value == res[0].value))	
+				res = new Error(res[0] ? res[0].value : 'Timeout');
+
+			callback(res);		  
+		}
 	
 		function getValue(i) {
-			if (i == address_list[i].length) {
-				client._port.close();
-				return callback(res);
-			}
+			if (!timer)
+				return;
+
+			if (i == address_list.length) 
+				return onEnd();
 
 			let address = address_list[i]; 
 			if (!client[address.func] || !!isNaN(address.register) || address.register < 1) {
@@ -37,13 +53,9 @@ exports.getValues = function(opts, address_list, callback) {
 			}
 
 			client[address.func](address.register - 1, regCount[address.type] || 1, function(err, data) {
-				if (err == 'Port Not Open')
-					err = 'Timeout';
-
 				res[i] = {
-					value: (err) ? err : data.buffer[address.type + address.order] ? data.buffer[address.type + address.order]() : data.buffer.readInt8(), 
-					isError: !!(err), 
-					raw: (err) ? err : data.buffer
+					value: err ? (err.message || err): data.buffer[address.type + address.order] ? data.buffer[address.type + address.order]() : data.buffer.readInt8(), 
+					isError: !!err
 				};
 
 				getValue(i + 1);
@@ -58,10 +70,10 @@ exports.getValues = function(opts, address_list, callback) {
 // actions = {func: writeFC16, register: 3, param: [10, 23]}
 /*
 	Func table
-    writeFC5  - Force Single Coil. Param must be 0xFF00 (on) or 0x0000 (off).
-    writeFC6  - Preset Single Register. Param is a 16-bit word.
-    writeFC15 - Force Multiple Coils. Param is array.
-    writeFC16 - Preset Multiple Registers. Param is array.
+	writeFC5  - Force Single Coil. Param must be 0xFF00 (on) or 0x0000 (off).
+	writeFC6  - Preset Single Register. Param is a 16-bit word.
+	writeFC15 - Force Multiple Coils. Param is array.
+	writeFC16 - Preset Multiple Registers. Param is array.
 */    
 exports.doAction = function(opts, action, callback) {
 	let client = new ModbusRTU();
@@ -71,13 +83,13 @@ exports.doAction = function(opts, action, callback) {
 		client.setTimeout(opts.timeout * 1000 || 3000);
 
 		if (!client[action.func]) {
-			client._port.close();
+			client.close();
 			return callback('BAD_ADDRESS: ' + JSON.stringify(action));
 		}
 
 		client[action.func](opts.device_id, action.register - 1, action.param, function (err, data) {
-			client._port.close();
-			callback(err);
+			client.close();
+			callback(err && err.message || '');
 		})
 	});			
 }

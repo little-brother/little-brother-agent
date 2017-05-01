@@ -97,7 +97,7 @@ agent.on('GET-VALUE', function (data, msg_id) {
 
 	protocols[data.protocol].getValues(data.protocol_params, [data.address], function (res) {
 		res.time = new Date().getTime(); 
-		agent.send('GET-VALUE', res instanceof Error ? {value: res.message, isError: true} : res[0], msg_id)
+		agent.send('GET-VALUE', res instanceof Error ? 'ERR: ' + res.message : res[0].value, msg_id);
 	});
 });
 

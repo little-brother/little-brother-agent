@@ -67,7 +67,7 @@ exports.getValues = function(opts, address_list, callback) {
 }
 
 // opts = {ip: 123.45.56.78, port: 123, device_id: 161, timeout: 3}
-// actions = {func: writeFC16, register: 3, param: [10, 23]}
+// actions = {func: writeFC16, register: 3, value: [10, 23]}
 /*
 	Func table
 	writeFC5  - Force Single Coil. Param must be 0xFF00 (on) or 0x0000 (off).
@@ -82,14 +82,20 @@ exports.doAction = function(opts, action, callback) {
 		client.setID();
 		client.setTimeout(opts.timeout * 1000 || 3000);
 
-		if (!client[action.func]) {
+		if (!client[action.func] || isNaN(action.register)) {
 			client.close();
 			return callback('BAD_ADDRESS: ' + JSON.stringify(action));
 		}
 
-		client[action.func](opts.device_id, action.register - 1, action.param, function (err, data) {
-			client.close();
-			callback(err && err.message || '');
-		})
+		try {	
+			client[action.func](opts.device_id, action.register - 1, action.value, function (err, data) {
+				client.close();
+				callback(err && err.message || '');
+			})
+		} catch (err) {
+			console.error('Request: ', opts, action);
+			console.error(err);
+			callback(err.message);
+		}
 	});			
 }

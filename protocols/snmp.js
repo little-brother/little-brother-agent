@@ -1,6 +1,5 @@
 'use strict';
 const snmp = require('net-snmp');
-const iconv = require('iconv-lite');
 const ver = {'1' : snmp.Version1, '2c' : snmp.Version2c};
 
 // opts = {version: 2c, community: public, port: 161, timeout: 3}
@@ -15,10 +14,12 @@ exports.getValues = function(opts, address_list, callback) {
 		timeout: opts.timeout * 1000 || 3000
 	});
 
-	function parseValue(value, hint) {
-		if (!hint)
-			return isNaN(value) ? value.toString() : value;
+	function parseValue(value, type, hint) {
+		// Opaque 4 byte 
+		if (type == snmp.ObjectType.Opaque && value instanceof Buffer && value.length == 7) 
+			value = Buffer.from(value.slice(3)).readFloatBE();
 
+		// MAC
 		if (hint == 'MAC' && value instanceof Buffer && value.length == 6) {
 			let res = [];
 			for (let i = 0; i < 6; i++)
@@ -26,10 +27,7 @@ exports.getValues = function(opts, address_list, callback) {
 			return res.map((e) => e.length == 1 ? '0' + e : e).join(':');
 		}
 
-		if (value instanceof Buffer && iconv.encodingExists(hint))
-			return iconv.decode(value, hint);
-
-		return value.toString();
+		return isNaN(value) ? value.toString() : value;
 	}
 
 	let res = new Array(address_list.length);
@@ -45,7 +43,7 @@ exports.getValues = function(opts, address_list, callback) {
 			let address = address_list[i].oid; 
 			session.get([address], function(err, rows){
 				res[i] = {
-					value: (err) ? err.message : parseValue(rows[0].value, address_list[i].hint),
+					value: (err) ? err.message : parseValue(rows[0].value, rows[0].type, address_list[i].hint),
 					isError: !!(err)
 				};
 	
@@ -65,7 +63,7 @@ exports.getValues = function(opts, address_list, callback) {
 
 			res = address_list.map(function(address, i) {
 				return {
-					value:  snmp.isVarbindError(rows[i]) ? snmp.varbindError(rows[i]) : parseValue(rows[i].value, address.hint),
+					value:  snmp.isVarbindError(rows[i]) ? snmp.varbindError(rows[i]) : parseValue(rows[i].value, rows[i].type, address.hint),
 					isError: !!snmp.isVarbindError(rows[i])
 				}
 			});
